@@ -21,8 +21,13 @@ static DATA_ROOT_PREFIX: &'static str = "drop";
 #[cfg(debug_assertions)]
 static DATA_ROOT_PREFIX: &str = "drop-debug";
 
-pub static DATA_ROOT_DIR: LazyLock<Arc<PathBuf>> =
-    LazyLock::new(|| Arc::new(dirs::data_dir().unwrap().join(DATA_ROOT_PREFIX)));
+pub static DATA_ROOT_DIR: LazyLock<Arc<PathBuf>> = LazyLock::new(|| {
+    Arc::new(
+        dirs::data_dir()
+            .expect("Failed to get data dir")
+            .join(DATA_ROOT_PREFIX),
+    )
+});
 
 // Custom JSON serializer to support everything we need
 #[derive(Debug, Default, Clone)]
@@ -63,13 +68,49 @@ impl DatabaseImpls for DatabaseInterface {
         let pfx_dir = DATA_ROOT_DIR.join("pfx");
 
         debug!("creating data directory at {DATA_ROOT_DIR:?}");
-        create_dir_all(DATA_ROOT_DIR.as_path()).unwrap();
-        create_dir_all(&games_base_dir).unwrap();
-        create_dir_all(&logs_root_dir).unwrap();
-        create_dir_all(&cache_dir).unwrap();
-        create_dir_all(&pfx_dir).unwrap();
+        create_dir_all(DATA_ROOT_DIR.as_path()).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create directory {} with error {}",
+                DATA_ROOT_DIR.display(),
+                e
+            )
+        });
+        create_dir_all(&games_base_dir).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create directory {} with error {}",
+                games_base_dir.display(),
+                e
+            )
+        });
+        create_dir_all(&logs_root_dir).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create directory {} with error {}",
+                logs_root_dir.display(),
+                e
+            )
+        });
+        create_dir_all(&cache_dir).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create directory {} with error {}",
+                cache_dir.display(),
+                e
+            )
+        });
+        create_dir_all(&pfx_dir).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create directory {} with error {}",
+                pfx_dir.display(),
+                e
+            )
+        });
 
-        let exists = fs::exists(db_path.clone()).unwrap();
+        let exists = fs::exists(db_path.clone()).unwrap_or_else(|e| {
+            panic!(
+                "Failed to find if {} exists with error {}",
+                db_path.display(),
+                e
+            )
+        });
 
         if exists {
             match PathDatabase::load_from_path(db_path.clone()) {
@@ -78,21 +119,19 @@ impl DatabaseImpls for DatabaseInterface {
             }
         } else {
             let default = Database::new(games_base_dir, None, cache_dir);
-            debug!(
-                "Creating database at path {}",
-                db_path.as_os_str().to_str().unwrap()
-            );
+            debug!("Creating database at path {}", db_path.display());
             PathDatabase::create_at_path(db_path, default).expect("Database could not be created")
         }
     }
 
     fn database_is_set_up(&self) -> bool {
-        !self.borrow_data().unwrap().base_url.is_empty()
+        !borrow_db_checked().base_url.is_empty()
     }
 
     fn fetch_base_url(&self) -> Url {
-        let handle = self.borrow_data().unwrap();
-        Url::parse(&handle.base_url).unwrap()
+        let handle = borrow_db_checked();
+        Url::parse(&handle.base_url)
+            .unwrap_or_else(|_| panic!("Failed to parse base url {}", handle.base_url))
     }
 }
 
@@ -111,13 +150,16 @@ fn handle_invalid_database(
         base
     };
     info!("old database stored at: {}", new_path.to_string_lossy());
-    fs::rename(&db_path, &new_path).unwrap();
+    fs::rename(&db_path, &new_path).unwrap_or_else(|e| {
+        panic!(
+            "Could not rename database {} to {} with error {}",
+            db_path.display(),
+            new_path.display(),
+            e
+        )
+    });
 
-    let db = Database::new(
-        games_base_dir.into_os_string().into_string().unwrap(),
-        Some(new_path),
-        cache_dir,
-    );
+    let db = Database::new(games_base_dir, Some(new_path), cache_dir);
 
     PathDatabase::create_at_path(db_path, db).expect("Database could not be created")
 }
