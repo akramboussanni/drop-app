@@ -8,8 +8,6 @@ on:
 #  schedule:
 #    - cron: "0 2 * * *" # run at 2 AM UTC
 
-# This workflow will trigger on each push to the `release` branch to create or update a GitHub release, build your app, and upload the artifacts to the release.
-
 jobs:
   publish-tauri:
     permissions:
@@ -38,6 +36,10 @@ jobs:
         with:
           # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install vips on macOS
+        if: matrix.platform == 'macos-latest'
+        run: brew install vips
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'ubuntu-22.04-arm' # This must match the platform value defined above.
